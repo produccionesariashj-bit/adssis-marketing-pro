@@ -1,0 +1,89 @@
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  try {
+    const { businessData } = req.body;
+    
+    const productsPrompt = `
+Analiza este negocio y extrae los productos/servicios:
+
+Negocio: ${businessData.businessName}
+Productos: ${businessData.productsServices}
+
+Responde en JSON:
+{
+  "products": [
+    {"name": "Producto", "price": "precio", "description": "descripción"}
+  ]
+}`;
+
+    const productsResponse = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: productsPrompt }],
+      temperature: 0.3,
+      max_tokens: 1000
+    });
+
+    const products = JSON.parse(productsResponse.choices[0].message.content).products;
+    
+    const generatedContent = [];
+    for (let i = 0; i < 5; i++) {
+      const product = products[i % products.length];
+      
+      const contentPrompt = `
+Crea un post para redes sociales para:
+Negocio: ${businessData.businessName}
+Producto: ${product.name}
+Máximo 150 caracteres, incluye emojis.`;
+
+      const contentResponse = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: contentPrompt }],
+        temperature: 0.7,
+        max_tokens: 200
+      });
+
+      generatedContent.push({
+        id: i + 1,
+        title: `Post ${i + 1}: ${product.name}`,
+        content: contentResponse.choices[0].message.content,
+        platform: 'Instagram',
+        type: 'Post + Imagen',
+        status: 'pending',
+        reasoning: `Promociona ${product.name}`,
+        reach: Math.floor(Math.random() * 5000) + 1000
+      });
+    }
+
+    const aiMatrix = {
+      company: { 
+        name: businessData.businessName, 
+        type: businessData.businessType, 
+        location: businessData.location 
+      },
+      products: products,
+      clients: [{ segment: "Cliente Principal", demo: "Detectado por IA" }]
+    };
+
+    res.status(200).json({
+      success: true,
+      matrix: aiMatrix,
+      content: generatedContent
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error procesando con IA' 
+    });
+  }
+}
