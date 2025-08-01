@@ -1,8 +1,4 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Gemini API - No necesita import
 
 // MATRIZ UNIVERSAL COMPLETA
 const ENTERPRISE_MARKETING_MATRIX = {
@@ -133,12 +129,15 @@ Responde SOLO en formato JSON así:
   ]
 }`;
 
-    const productsResponse = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: productsPrompt }],
-      temperature: 0.2,
-      max_tokens: 1500
+    const productsResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: productsPrompt }] }]
+      })
     });
+    const productsData = await productsResponse.json();
+    const productsContent = productsData.candidates[0].content.parts[0].text;
 
     // 2. EXTRAER AVATARES DE CLIENTES CON IA MEJORADA
     const avatarsPrompt = `
@@ -160,18 +159,21 @@ Responde SOLO en formato JSON así:
   ]
 }`;
 
-    const avatarsResponse = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", 
-      messages: [{ role: "user", content: avatarsPrompt }],
-      temperature: 0.3,
-      max_tokens: 1500
+    const avatarsResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: avatarsPrompt }] }]
+      })
     });
+    const avatarsData = await avatarsResponse.json();
+    const avatarsContent = avatarsData.candidates[0].content.parts[0].text;
 
     // 3. PROCESAR RESPUESTAS DE IA
     let products, avatars;
     try {
-      products = JSON.parse(productsResponse.choices[0].message.content).products;
-      avatars = JSON.parse(avatarsResponse.choices[0].message.content).avatars;
+      products = JSON.parse(productsContent).products;
+      avatars = JSON.parse(avatarsContent).avatars;
     } catch (parseError) {
       console.error('Error parsing IA responses:', parseError);
       // Fallback en caso de error de parsing
@@ -243,12 +245,13 @@ Genera un post único que suene auténtico para ${businessData.businessType} y c
 `;
 
       contentPromises.push(
-        openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: advancedPrompt }],
-          temperature: 0.7,
-          max_tokens: 300
-        })
+        fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: advancedPrompt }] }]
+          })
+        }).then(res => res.json())
       );
     }
 
@@ -265,7 +268,7 @@ Genera un post único que suene auténtico para ${businessData.businessType} y c
       return {
         id: index + 1,
         title: `${product.name} → ${avatar.segment}`,
-        content: response.choices[0].message.content.trim(),
+        content: response.candidates[0].content.parts[0].text.trim(),
         platform: platforms[Math.floor(Math.random() * platforms.length)],
         type: types[Math.floor(Math.random() * types.length)],
         status: 'pending',
@@ -301,7 +304,7 @@ Genera un post único que suene auténtico para ${businessData.businessType} y c
       matrix: aiMatrix,
       content: generatedContent,
       generation_time: new Date().toISOString(),
-      matrix_version: "Enterprise v2.0"
+      matrix_version: "Enterprise v2.0 - Gemini Powered"
     });
 
   } catch (error) {
