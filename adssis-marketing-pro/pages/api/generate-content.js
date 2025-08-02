@@ -1,4 +1,9 @@
-// Gemini API - No necesita import
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // MATRIZ UNIVERSAL COMPLETA
 const ENTERPRISE_MARKETING_MATRIX = {
@@ -136,6 +141,11 @@ Responde SOLO en formato JSON así:
         contents: [{ parts: [{ text: productsPrompt }] }]
       })
     });
+    
+    if (!productsResponse.ok) {
+      throw new Error(`Gemini API error: ${productsResponse.status}`);
+    }
+    
     const productsData = await productsResponse.json();
     const productsContent = productsData.candidates[0].content.parts[0].text;
 
@@ -166,14 +176,23 @@ Responde SOLO en formato JSON así:
         contents: [{ parts: [{ text: avatarsPrompt }] }]
       })
     });
+    
+    if (!avatarsResponse.ok) {
+      throw new Error(`Gemini API error: ${avatarsResponse.status}`);
+    }
+    
     const avatarsData = await avatarsResponse.json();
     const avatarsContent = avatarsData.candidates[0].content.parts[0].text;
 
     // 3. PROCESAR RESPUESTAS DE IA
     let products, avatars;
     try {
-      products = JSON.parse(productsContent).products;
-      avatars = JSON.parse(avatarsContent).avatars;
+      // Limpiar JSON responses
+      const cleanProductsContent = productsContent.replace(/```json|```/g, '').trim();
+      const cleanAvatarsContent = avatarsContent.replace(/```json|```/g, '').trim();
+      
+      products = JSON.parse(cleanProductsContent).products;
+      avatars = JSON.parse(cleanAvatarsContent).avatars;
     } catch (parseError) {
       console.error('Error parsing IA responses:', parseError);
       // Fallback en caso de error de parsing
@@ -251,7 +270,12 @@ Genera un post único que suene auténtico para ${businessData.businessType} y c
           body: JSON.stringify({
             contents: [{ parts: [{ text: advancedPrompt }] }]
           })
-        }).then(res => res.json())
+        }).then(async (res) => {
+          if (!res.ok) {
+            throw new Error(`Gemini API error: ${res.status}`);
+          }
+          return res.json();
+        })
       );
     }
 
@@ -298,6 +322,27 @@ Genera un post único que suene auténtico para ${businessData.businessType} y c
         total_content_pillars: ENTERPRISE_MARKETING_MATRIX.contentPillars.length
       }
     };
+
+    // 7. GUARDAR EN SUPABASE
+    try {
+      const { data: savedData, error: dbError } = await supabase
+        .from('generated_content')
+        .insert([
+          {
+            business_name: businessData.businessName,
+            industry: businessData.businessType,
+            marketing_matrix: aiMatrix,
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select();
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+      }
+    } catch (dbError) {
+      console.error('Database save error:', dbError);
+    }
 
     res.status(200).json({
       success: true,
